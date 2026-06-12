@@ -12,6 +12,7 @@ import dotenv
 
 from server.database import execute_migrations
 import shared.protocol as proto
+# from ..shared import protocol as proto
 
 LOGGER = logging.getLogger(__name__)
 
@@ -102,28 +103,31 @@ class ServerState:
 
         match message.kind:
             case proto.MessageKind.CONNECT:
+                if not isinstance(message.payload, proto.ConnectRequestPayload):
+                    raise ValueError('Invalid payload type for CONNECT message')
+
                 try:
-                    sender.set_name(message.payload[proto.PayloadField.REQ_CONNECT_USERNAME])
+                    sender.set_name(message.payload.username)
                     LOGGER.info(f'Client {sender.addr} set their username to {sender.username}')
 
                     await sender.respond(proto.Message(
                         type_=proto.MessageType.RESPONSE,
                         kind=proto.MessageKind.CONNECTED,
-                        payload={
-                            proto.PayloadField.RESP_SUCCESS: True,
-                            proto.PayloadField.RESP_CONNECTED_USER: sender.username
-                        }
+                        payload=proto.ConnectedResponsePayload(
+                            success=True,
+                            user=sender.username,
+                        )
                     ))
                 except ValueError as e:
-                    LOGGER.warning(f'Client {sender.addr} attempted to set their username to {message.payload[proto.PayloadField.REQ_CONNECT_USERNAME]}, but it was already set to {sender.username}')
+                    LOGGER.warning(f'Client {sender.addr} attempted to set their username to {message.payload.username}, but it was invalid: {e}')
 
                     await sender.respond(proto.Message(
                         type_=proto.MessageType.ERROR,
                         kind=proto.MessageKind.CONNECTED,
-                        payload={
-                            proto.PayloadField.RESP_SUCCESS: False,
-                            proto.PayloadField.RESP_ERROR: str(e)
-                        }
+                        payload=proto.ResponsePayload(
+                            success=False,
+                            error=str(e)
+                        )
                     ))
             case _:
                 LOGGER.warning(f'Unknown message kind: {message.kind}')
@@ -168,9 +172,6 @@ class ServerState:
     @property
     def logfile(self) -> str:
         return self._args.logfile
-
-    def __repr__(self) -> str:
-        return f'ServerState(host={self.host}, port={self.port})'
 
 
 def ensure_prerequisites() -> None:

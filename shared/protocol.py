@@ -2,21 +2,47 @@ import enum
 import json
 from typing import Self
 
+from pydantic import BaseModel
+
+
 class MessageType(enum.StrEnum):
     REQUEST = "REQUEST"
     RESPONSE = "RESPONSE"
     ERROR = "ERROR"
 
+
 class MessageKind(enum.StrEnum):
     CONNECT = "CONNECT"
     CONNECTED = "CONNECTED"
 
-class PayloadField(enum.StrEnum):
-    RESP_SUCCESS = "success"
-    RESP_ERROR = "error"
 
-    REQ_CONNECT_USERNAME = "username"
-    RESP_CONNECTED_USER = "user"
+class Payload(BaseModel):
+    @classmethod
+    def from_data(cls, type_: MessageType, kind: MessageKind, data: dict):
+        if type_ == MessageType.REQUEST:
+            if kind == MessageKind.CONNECT:
+                return ConnectRequestPayload(**data)
+
+        raise ValueError(f'Unknown message type/kind combination: {type_}/{kind}')
+
+
+class RequestPayload(Payload):
+    pass
+
+
+class ResponsePayload(Payload):
+    success: bool
+    error: str | None = None
+
+
+class ConnectRequestPayload(RequestPayload):
+    username: str
+    password: str
+
+
+class ConnectedResponsePayload(ResponsePayload):
+    user: str | None = None
+
 
 class Message:
     """
@@ -34,7 +60,7 @@ class Message:
         self.type = type_
         self.kind = kind
 
-        self.payload: dict = payload
+        self.payload: Payload = payload
 
     @classmethod
     def deserialize(cls, data: str) -> Self:
@@ -52,14 +78,18 @@ class Message:
         if raw_kind not in MessageKind.__members__:
             raise ValueError(f'Unknown message kind: {raw_kind}')
 
-        payload = json.loads(payload_str)
+        type_ = MessageType(raw_type)
+        kind = MessageKind(raw_kind)
 
-        return cls(MessageType(raw_type), MessageKind(raw_kind), payload)
+        payload_data = json.loads(payload_str)
+        payload = Payload.from_data(type_, kind, payload_data)
+
+        return cls(type_, kind, payload)
 
     def serialize(self) -> str:
         """Serializes the message to a string format as described in the class docstring."""
 
-        payload = json.dumps(self.payload)
+        payload = self.payload.model_dump_json()
         body = f'Type: {self.type}\nKind: {self.kind}\n\n{payload}'
 
         length = len(body.encode())
