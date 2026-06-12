@@ -1,0 +1,69 @@
+import enum
+import json
+from typing import Self
+
+class MessageType(enum.StrEnum):
+    REQUEST = "REQUEST"
+    RESPONSE = "RESPONSE"
+    ERROR = "ERROR"
+
+class MessageKind(enum.StrEnum):
+    CONNECT = "CONNECT"
+    CONNECTED = "CONNECTED"
+
+class PayloadField(enum.StrEnum):
+    RESP_SUCCESS = "success"
+    RESP_ERROR = "error"
+
+    REQ_CONNECT_USERNAME = "username"
+    RESP_CONNECTED_USER = "user"
+
+class Message:
+    """
+    Expected format:
+        [length, padded to 4 characters in hexadecimal]
+        Type: <MessageType>
+        Kind: <MessageKind>
+
+        <payload>
+
+    The length is the length of the message body (everything after the length field) in bytes. The length does not include the length field itself, nor the newline after it.
+    """
+
+    def __init__(self, type_, kind, payload):
+        self.type = type_
+        self.kind = kind
+
+        self.payload: dict = payload
+
+    @classmethod
+    def deserialize(cls, data: str) -> Self:
+        type_str, kind_str, _, payload_str = data.split('\n', 3)
+
+        if not type_str.startswith('Type:') or not kind_str.startswith('Kind:'):
+            raise ValueError(f'Invalid message format: {data}')
+
+        raw_type = type_str.split(':', 1)[1].strip()
+        raw_kind = kind_str.split(':', 1)[1].strip()
+
+        if raw_type not in MessageType.__members__:
+            raise ValueError(f'Unknown message type: {raw_type}')
+
+        if raw_kind not in MessageKind.__members__:
+            raise ValueError(f'Unknown message kind: {raw_kind}')
+
+        payload = json.loads(payload_str)
+
+        return cls(MessageType(raw_type), MessageKind(raw_kind), payload)
+
+    def serialize(self) -> str:
+        """Serializes the message to a string format as described in the class docstring."""
+
+        payload = json.dumps(self.payload)
+        body = f'Type: {self.type}\nKind: {self.kind}\n\n{payload}'
+
+        length = len(body.encode())
+        length_str = f'{length:04x}'
+
+        return f'{length_str}\n{body}'
+
