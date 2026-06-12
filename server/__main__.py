@@ -1,9 +1,16 @@
+# Pyright keeps acting up about server.database and shared.protocol, even though they exist
+# So, I'm muting the import errors for now
+# pyright: reportMissingImports=false
+
 import os
 import logging
 import asyncio
 import argparse
 from typing import Optional
+import mysql.connector
+import dotenv
 
+from server.database import execute_migrations
 import shared.protocol as proto
 
 LOGGER = logging.getLogger(__name__)
@@ -70,6 +77,15 @@ class ServerState:
 
         self.clients: set[ClientData] = set()
         self.server = None
+
+        self.db_pool = mysql.connector.pooling.MySQLConnectionPool(
+            pool_name='chat_server_pool',
+            pool_size=5,
+            host=os.getenv('MYSQL_HOST', 'localhost'),
+            port=int(os.getenv('MYSQL_PORT', '3306')),
+            user=os.getenv('MYSQL_USER', 'root'),
+            password=os.getenv('MYSQL_PASSWORD', ''),
+        )
 
     async def bind(self) -> None:
         self.server = await asyncio.start_server(self._handle_client, self.host, self.port)
@@ -162,6 +178,8 @@ def ensure_prerequisites() -> None:
     if not os.path.exists('logs'):
         os.makedirs('logs')
 
+    execute_migrations()
+
 
 async def main() -> None:
     ensure_prerequisites()
@@ -171,4 +189,6 @@ async def main() -> None:
     await state.listen()
 
 if __name__ == '__main__':
+    dotenv.load_dotenv()
+
     asyncio.run(main())
