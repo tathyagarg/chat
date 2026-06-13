@@ -28,6 +28,8 @@ class Payload(BaseModel):
         if type_ == MessageType.REQUEST:
             if kind == MessageKind.CONNECT:
                 return ConnectRequestPayload(**data)
+            elif kind == MessageKind.DISCONNECT:
+                return DisconnectRequestPayload(**data)
 
         raise ValueError(f'Unknown message type/kind combination: {type_}/{kind}')
 

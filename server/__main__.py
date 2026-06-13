@@ -67,6 +67,21 @@ async def handle_request_connect(
             )
         ))
 
+async def handle_request_disconnect(
+    sender: ClientData
+):
+    LOGGER.info(f'Client {sender.addr} disconnected')
+    await sender.respond(proto.Message(
+        type_=proto.MessageType.RESPONSE,
+        kind=proto.MessageKind.DISCONNECTED,
+        payload=proto.ResponsePayload(
+            success=True
+        )
+    ))
+
+    sender.writer.close()
+    await sender.writer.wait_closed()
+
 class ServerState:
     def __init__(
         self,
@@ -126,16 +141,27 @@ class ServerState:
         self,
         message: proto.Message,
         sender: ClientData,
-    ) -> None:
+    ) -> bool:
+        """
+        Process a message from a client.
+        Returns whether the server should continue listening to the client (True)
+        or disconnect the client (False).
+        """
+
         if message.type != proto.MessageType.REQUEST:
             LOGGER.warning(f'Ignoring non-request message from {sender.username or sender.addr}')
-            return
+            return True
 
         match message.kind:
             case proto.MessageKind.CONNECT:
-                return await handle_request_connect(message, sender, self.db_pool)
+                await handle_request_connect(message, sender, self.db_pool)
+            case proto.MessageKind.DISCONNECT:
+                await handle_request_disconnect(sender)
+                return False
             case _:
                 LOGGER.warning(f'Unknown message kind: {message.kind}')
+
+        return True
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = ClientData(reader, writer)
@@ -149,7 +175,10 @@ class ServerState:
             raw_message = raw_message_bytes.decode()
 
             message = proto.Message.deserialize(raw_message)
-            await self._process_message(message, client)
+            maintain = await self._process_message(message, client)
+
+            if not maintain:
+                break
 
     async def listen(self) -> None:
         if self.server is None:
