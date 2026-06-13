@@ -15,6 +15,8 @@ class MessageKind(enum.StrEnum):
     CONNECT = "CONNECT"
     CONNECTED = "CONNECTED"
 
+    DISCONNECT = "DISCONNECT"
+    DISCONNECTED = "DISCONNECTED"
 
 class Payload(BaseModel):
     @classmethod
@@ -51,6 +53,9 @@ class ConnectRequestPayload(RequestPayload):
     username: str
     password: str
 
+
+class DisconnectRequestPayload(RequestPayload):
+    pass
 
 class ConnectedResponsePayload(ResponsePayload):
     user: str | None = None

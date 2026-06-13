@@ -6,10 +6,10 @@ import os
 import logging
 import asyncio
 import argparse
-from typing import Optional
 import mysql.connector
 import dotenv
 
+from server.client_data import ClientData
 from server.database import execute_migrations, authenticate_user
 import shared.protocol as proto
 # from ..shared import protocol as proto
@@ -19,24 +19,53 @@ LOGGER = logging.getLogger(__name__)
 #: The default port that the server binds onto when no port is specified
 DEFAULT_PORT = 12345
 
-class ClientData:
-    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        self.reader = reader
-        self.writer = writer
+async def handle_request_connect(
+    message: proto.Message,
+    sender: ClientData,
+    pool: mysql.connector.pooling.MySQLConnectionPool
+):
+    if not isinstance(message.payload, proto.ConnectRequestPayload):
+        raise ValueError('Invalid payload type for CONNECT message')
 
-        self.addr = writer.get_extra_info('peername')
-        self.username: Optional[str] = None
+    try:
+        with pool.get_connection() as conn:
+            success = authenticate_user(conn, message.payload.username, message.payload.password)
 
-    def set_name(self, name: str) -> None:
-        if self.username is not None:
-            raise ValueError('Username is already set')
+        if not success:
+            LOGGER.warning(f'Client {sender.addr} attempted to connect with invalid credentials: {message.payload.username}')
 
-        self.username = name
+            await sender.respond(proto.Message(
+                type_=proto.MessageType.ERROR,
+                kind=proto.MessageKind.CONNECTED,
+                payload=proto.ResponsePayload(
+                    success=False,
+                    error='Invalid username or password'
+                )
+            ))
+            return
 
-    async def respond(self, message: proto.Message) -> None:
-        serialized = message.serialize()
-        self.writer.write(serialized.encode())
-        await self.writer.drain()
+        sender.set_name(message.payload.username)
+        LOGGER.info(f'Client {sender.addr} set their username to {sender.username}')
+
+        await sender.respond(proto.Message(
+            type_=proto.MessageType.RESPONSE,
+            kind=proto.MessageKind.CONNECTED,
+            payload=proto.ConnectedResponsePayload(
+                success=True,
+                user=sender.username,
+            )
+        ))
+    except ValueError as e:
+        LOGGER.warning(f'Client {sender.addr} attempted to set their username to {message.payload.username}, but it was invalid: {e}')
+
+        await sender.respond(proto.Message(
+            type_=proto.MessageType.ERROR,
+            kind=proto.MessageKind.CONNECTED,
+            payload=proto.ResponsePayload(
+                success=False,
+                error=str(e)
+            )
+        ))
 
 class ServerState:
     def __init__(
@@ -104,48 +133,7 @@ class ServerState:
 
         match message.kind:
             case proto.MessageKind.CONNECT:
-                if not isinstance(message.payload, proto.ConnectRequestPayload):
-                    raise ValueError('Invalid payload type for CONNECT message')
-
-                try:
-                    with self.db_pool.get_connection() as conn:
-                        success = authenticate_user(conn, message.payload.username, message.payload.password)
-
-                    if not success:
-                        LOGGER.warning(f'Client {sender.addr} attempted to connect with invalid credentials: {message.payload.username}')
-
-                        await sender.respond(proto.Message(
-                            type_=proto.MessageType.ERROR,
-                            kind=proto.MessageKind.CONNECTED,
-                            payload=proto.ResponsePayload(
-                                success=False,
-                                error='Invalid username or password'
-                            )
-                        ))
-                        return
-
-                    sender.set_name(message.payload.username)
-                    LOGGER.info(f'Client {sender.addr} set their username to {sender.username}')
-
-                    await sender.respond(proto.Message(
-                        type_=proto.MessageType.RESPONSE,
-                        kind=proto.MessageKind.CONNECTED,
-                        payload=proto.ConnectedResponsePayload(
-                            success=True,
-                            user=sender.username,
-                        )
-                    ))
-                except ValueError as e:
-                    LOGGER.warning(f'Client {sender.addr} attempted to set their username to {message.payload.username}, but it was invalid: {e}')
-
-                    await sender.respond(proto.Message(
-                        type_=proto.MessageType.ERROR,
-                        kind=proto.MessageKind.CONNECTED,
-                        payload=proto.ResponsePayload(
-                            success=False,
-                            error=str(e)
-                        )
-                    ))
+                return await handle_request_connect(message, sender, self.db_pool)
             case _:
                 LOGGER.warning(f'Unknown message kind: {message.kind}')
 
