@@ -1,4 +1,5 @@
 annotated-types==0.7.0
+bcrypt==5.0.0
 mysql-connector-python==9.7.0
 pydantic==2.13.4
 pydantic_core==2.46.4

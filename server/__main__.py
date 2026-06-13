@@ -10,7 +10,7 @@ from typing import Optional
 import mysql.connector
 import dotenv
 
-from server.database import execute_migrations
+from server.database import execute_migrations, authenticate_user
 import shared.protocol as proto
 # from ..shared import protocol as proto
 
@@ -86,6 +86,7 @@ class ServerState:
             port=int(os.getenv('MYSQL_PORT', '3306')),
             user=os.getenv('MYSQL_USER', 'root'),
             password=os.getenv('MYSQL_PASSWORD', ''),
+            database=os.getenv('MYSQL_DATABASE', 'chat')
         )
 
     async def bind(self) -> None:
@@ -107,6 +108,22 @@ class ServerState:
                     raise ValueError('Invalid payload type for CONNECT message')
 
                 try:
+                    with self.db_pool.get_connection() as conn:
+                        success = authenticate_user(conn, message.payload.username, message.payload.password)
+
+                    if not success:
+                        LOGGER.warning(f'Client {sender.addr} attempted to connect with invalid credentials: {message.payload.username}')
+
+                        await sender.respond(proto.Message(
+                            type_=proto.MessageType.ERROR,
+                            kind=proto.MessageKind.CONNECTED,
+                            payload=proto.ResponsePayload(
+                                success=False,
+                                error='Invalid username or password'
+                            )
+                        ))
+                        return
+
                     sender.set_name(message.payload.username)
                     LOGGER.info(f'Client {sender.addr} set their username to {sender.username}')
 

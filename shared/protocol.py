@@ -18,12 +18,24 @@ class MessageKind(enum.StrEnum):
 
 class Payload(BaseModel):
     @classmethod
+    def empty(cls):
+        return cls()
+
+    @classmethod
     def from_data(cls, type_: MessageType, kind: MessageKind, data: dict):
         if type_ == MessageType.REQUEST:
             if kind == MessageKind.CONNECT:
                 return ConnectRequestPayload(**data)
 
         raise ValueError(f'Unknown message type/kind combination: {type_}/{kind}')
+
+    @classmethod
+    def create_payload(cls, type_: MessageType, kind: MessageKind, payload_str: str):
+        if len(payload_str.strip()) == 0:
+            return cls.empty()
+
+        payload_data = json.loads(payload_str)
+        return cls.from_data(type_, kind, payload_data)
 
 
 class RequestPayload(Payload):
@@ -81,8 +93,7 @@ class Message:
         type_ = MessageType(raw_type)
         kind = MessageKind(raw_kind)
 
-        payload_data = json.loads(payload_str)
-        payload = Payload.from_data(type_, kind, payload_data)
+        payload = Payload.create_payload(type_, kind, payload_str)
 
         return cls(type_, kind, payload)
 

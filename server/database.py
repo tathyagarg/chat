@@ -1,7 +1,9 @@
 import os
 import pathlib
 
+import bcrypt
 import mysql.connector
+from mysql.connector.pooling import PooledMySQLConnection
 
 def all_migrations() -> list[str]:
     root = pathlib.Path(__file__).parent.parent
@@ -47,3 +49,33 @@ def execute_migrations() -> None:
         cur.execute('INSERT INTO migrations (name) VALUES (%s)', (migration,))
         conn.commit()
 
+def create_user(conn: PooledMySQLConnection, username: str, password: str) -> None:
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+    cur = conn.cursor()
+    cur.execute('INSERT INTO users (username, password) VALUES (%s, %s)', (username, hashed_password.decode('utf-8')))
+    conn.commit()
+
+def authenticate_user(
+    conn: PooledMySQLConnection,
+    username: str,
+    password: str,
+    create_if_not_exists: bool = True
+) -> bool:
+    cur = conn.cursor()
+    cur.execute('SELECT password FROM users WHERE username = %s', (username,))
+    result = cur.fetchone()
+
+    if result is None:
+        if not create_if_not_exists:
+            return False
+
+        cur.close()
+        create_user(conn, username, password)
+        return True
+
+    stored_password, = result
+    if not isinstance(stored_password, str):
+        return False
+
+    return bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8'))
