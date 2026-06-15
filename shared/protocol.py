@@ -18,6 +18,15 @@ class MessageKind(enum.StrEnum):
     DISCONNECT = "DISCONNECT"
     DISCONNECTED = "DISCONNECTED"
 
+    MESSAGE = "MESSAGE"
+    PROPAGATE = "PROPAGATE"
+
+
+class UserMessage(BaseModel):
+    username: str
+    content: str
+    timestamp: str
+
 class Payload(BaseModel):
     @classmethod
     def empty(cls):
@@ -30,6 +39,8 @@ class Payload(BaseModel):
                 return ConnectRequestPayload(**data)
             elif kind == MessageKind.DISCONNECT:
                 return DisconnectRequestPayload(**data)
+            elif kind == MessageKind.MESSAGE:
+                return MessageRequestPayload(**data)
 
         raise ValueError(f'Unknown message type/kind combination: {type_}/{kind}')
 
@@ -59,8 +70,22 @@ class ConnectRequestPayload(RequestPayload):
 class DisconnectRequestPayload(RequestPayload):
     pass
 
+
+class MessageRequestPayload(RequestPayload):
+    message: str
+
+
 class ConnectedResponsePayload(ResponsePayload):
     user: str | None = None
+    messages: list[UserMessage] | None = None
+
+
+class DisconnectedResponsePayload(ResponsePayload):
+    pass
+
+
+class PropagateMessagePayload(Payload):
+    message: UserMessage
 
 
 class Message:

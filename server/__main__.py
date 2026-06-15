@@ -6,11 +6,13 @@ import os
 import logging
 import asyncio
 import argparse
+import datetime
+
 import mysql.connector
 import dotenv
 
 from server.client_data import ClientData
-from server.database import execute_migrations, authenticate_user
+from server.database import execute_migrations, authenticate_user, fetch_recent_messages, store_message
 import shared.protocol as proto
 # from ..shared import protocol as proto
 
@@ -31,21 +33,24 @@ async def handle_request_connect(
         with pool.get_connection() as conn:
             success = authenticate_user(conn, message.payload.username, message.payload.password)
 
-        if not success:
-            LOGGER.warning(f'Client {sender.addr} attempted to connect with invalid credentials: {message.payload.username}')
+            if not success:
+                LOGGER.warning(f'Client {sender.addr} attempted to connect with invalid credentials: {message.payload.username}')
 
-            await sender.respond(proto.Message(
-                type_=proto.MessageType.ERROR,
-                kind=proto.MessageKind.CONNECTED,
-                payload=proto.ResponsePayload(
-                    success=False,
-                    error='Invalid username or password'
-                )
-            ))
-            return
+                await sender.respond(proto.Message(
+                    type_=proto.MessageType.ERROR,
+                    kind=proto.MessageKind.CONNECTED,
+                    payload=proto.ResponsePayload(
+                        success=False,
+                        error='Invalid username or password'
+                    )
+                ))
+                return
 
-        sender.set_name(message.payload.username)
-        LOGGER.info(f'Client {sender.addr} set their username to {sender.username}')
+            sender.set_name(message.payload.username)
+            LOGGER.info(f'Client {sender.addr} set their username to {sender.username}')
+
+            recent = fetch_recent_messages(conn, limit=10)
+            print(recent)
 
         await sender.respond(proto.Message(
             type_=proto.MessageType.RESPONSE,
@@ -53,6 +58,7 @@ async def handle_request_connect(
             payload=proto.ConnectedResponsePayload(
                 success=True,
                 user=sender.username,
+                messages=recent
             )
         ))
     except ValueError as e:
@@ -81,6 +87,40 @@ async def handle_request_disconnect(
 
     sender.writer.close()
     await sender.writer.wait_closed()
+
+async def handle_request_message(
+    message: proto.Message,
+    sender: ClientData,
+    clients: set[ClientData],
+    pool: mysql.connector.pooling.MySQLConnectionPool,
+):
+    if not isinstance(message.payload, proto.MessageRequestPayload):
+        raise ValueError('Invalid payload type for MESSAGE message')
+
+    received_at = datetime.datetime.now()
+
+    with pool.get_connection() as conn:
+        store_message(
+            conn,
+            sender.username or sender.addr,
+            message.payload.message
+        )
+
+    for client in clients:
+        if client is sender:
+            continue
+
+        await client.respond(proto.Message(
+            type_=proto.MessageType.REQUEST,
+            kind=proto.MessageKind.PROPAGATE,
+            payload=proto.PropagateMessagePayload(
+                message=proto.UserMessage(
+                    username=sender.username or sender.addr,
+                    content=message.payload.message,
+                    timestamp=received_at.isoformat()
+                )
+            )
+        ))
 
 class ServerState:
     def __init__(
@@ -158,6 +198,8 @@ class ServerState:
             case proto.MessageKind.DISCONNECT:
                 await handle_request_disconnect(sender)
                 return False
+            case proto.MessageKind.MESSAGE:
+                await handle_request_message(message, sender, self.clients, self.db_pool)
             case _:
                 LOGGER.warning(f'Unknown message kind: {message.kind}')
 

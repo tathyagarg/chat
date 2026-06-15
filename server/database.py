@@ -1,9 +1,13 @@
+# pyright: reportMissingImports=false
+
 import os
 import pathlib
 
 import bcrypt
 import mysql.connector
 from mysql.connector.pooling import PooledMySQLConnection
+
+import shared.protocol as proto
 
 def all_migrations() -> list[str]:
     root = pathlib.Path(__file__).parent.parent
@@ -79,3 +83,43 @@ def authenticate_user(
         return False
 
     return bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8'))
+
+def store_message(
+    conn: PooledMySQLConnection,
+    username: str,
+    message: str
+) -> None:
+    cur = conn.cursor()
+    cur.execute('''INSERT INTO messages (sender_id, content)
+        VALUES (
+            (SELECT id FROM users WHERE username = %s),
+            %s
+        )''', (username, message))
+    conn.commit()
+
+def fetch_recent_messages(
+    conn: PooledMySQLConnection,
+    limit: int = 50
+) -> list[tuple[str, str, str]]:
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT u.username, m.content, m.timestamp
+        FROM messages AS m
+        JOIN users AS u ON m.sender_id = u.id
+        ORDER BY m.timestamp DESC
+        LIMIT %s
+    ''', (limit,))
+
+    rows = cur.fetchall()
+    print(rows)
+
+    messages = list(map(
+        lambda row: proto.UserMessage(
+            username=row[0],
+            content=row[1],
+            timestamp=row[2].isoformat()
+        ),
+        rows
+    ))
+
+    return messages
