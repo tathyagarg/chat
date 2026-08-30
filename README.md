@@ -56,7 +56,7 @@ cd chat
 3. Create a `.env` file in the root directory of the project and add the variables found in the `.env.example` file. Update the values as needed for your environment.
 4. Start the application using Docker Compose:
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 ### Manual Setup
