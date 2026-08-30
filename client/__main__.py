@@ -103,7 +103,7 @@ async def authenticate_user(server) -> tuple[list[proto.UserMessage], str] | Non
 
 def display_message(message: proto.UserMessage) -> None:
     msg_time = datetime.datetime.fromisoformat(message.timestamp)
-    formatted_time = msg_time.strftime("%Y-%m-%d %H:%M:%S")
+    formatted_time = msg_time.strftime("%d %b, %Y %H:%M:%S")
 
     table = Table.grid(expand=True)
     table.add_row(message.content)
