@@ -10,11 +10,9 @@ services:
       - db_data:/var/lib/mysql
 
   chat-server:
-    build:
-      context: .
-      dockerfile: server/Dockerfile
+    image: ghcr.io/tathyagarg/chat-server:latest
     container_name: chat-server
-    restart: always
+    restart: unless-stopped
     environment:
       - MYSQL_HOST=${MYSQL_HOST}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
