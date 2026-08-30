@@ -10,7 +10,9 @@ services:
       - db_data:/var/lib/mysql
 
   chat-server:
-    build: .
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     container_name: chat-server
     restart: always
     environment:
