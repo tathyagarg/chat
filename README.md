@@ -2,6 +2,8 @@
 
 A chat application written in Python using async TCP networking and MySQL.
 
+![Preview](.github/assets/preview.png)
+
 ## Overview
 
 There are three main parts to this chat application:
