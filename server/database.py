@@ -17,6 +17,7 @@ def all_migrations() -> list[str]:
 
     return [str(migration.relative_to(root)) for migration in migration_files]
 
+
 def execute_migrations() -> None:
     conn = mysql.connector.connect(
         host=os.getenv('MYSQL_HOST', 'localhost'),
@@ -53,12 +54,14 @@ def execute_migrations() -> None:
         cur.execute('INSERT INTO migrations (name) VALUES (%s)', (migration,))
         conn.commit()
 
+
 def create_user(conn: PooledMySQLConnection, username: str, password: str) -> None:
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
 
     cur = conn.cursor()
     cur.execute('INSERT INTO users (username, password) VALUES (%s, %s)', (username, hashed_password.decode('utf-8')))
     conn.commit()
+
 
 def authenticate_user(
     conn: PooledMySQLConnection,
@@ -84,6 +87,7 @@ def authenticate_user(
 
     return bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8'))
 
+
 def store_message(
     conn: PooledMySQLConnection,
     username: str,
@@ -96,6 +100,7 @@ def store_message(
             %s
         )''', (username, message))
     conn.commit()
+
 
 def fetch_recent_messages(
     conn: PooledMySQLConnection,

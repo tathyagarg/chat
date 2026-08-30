@@ -21,6 +21,7 @@ LOGGER = logging.getLogger(__name__)
 #: The default port that the server binds onto when no port is specified
 DEFAULT_PORT = 12345
 
+
 async def handle_request_connect(
     message: proto.Message,
     sender: ClientData,
@@ -73,6 +74,7 @@ async def handle_request_connect(
             )
         ))
 
+
 async def handle_request_disconnect(
     sender: ClientData
 ):
@@ -87,6 +89,7 @@ async def handle_request_disconnect(
 
     sender.writer.close()
     await sender.writer.wait_closed()
+
 
 async def handle_request_message(
     message: proto.Message,
@@ -108,19 +111,26 @@ async def handle_request_message(
 
     for client in clients:
         if client is sender:
-            continue
-
-        await client.respond(proto.Message(
-            type_=proto.MessageType.REQUEST,
-            kind=proto.MessageKind.PROPAGATE,
-            payload=proto.PropagateMessagePayload(
-                message=proto.UserMessage(
-                    username=sender.username or sender.addr,
-                    content=message.payload.message,
-                    timestamp=received_at.isoformat()
+            await client.respond(proto.Message(
+                type_=proto.MessageType.RESPONSE,
+                kind=proto.MessageKind.ACK,
+                payload=proto.ResponsePayload(
+                    success=True
                 )
-            )
-        ))
+            ))
+        else:
+            await client.respond(proto.Message(
+                type_=proto.MessageType.RESPONSE,
+                kind=proto.MessageKind.PROPAGATE,
+                payload=proto.PropagateMessagePayload(
+                    message=proto.UserMessage(
+                        username=sender.username or sender.addr,
+                        content=message.payload.message,
+                        timestamp=received_at.isoformat()
+                    )
+                )
+            ))
+
 
 class ServerState:
     def __init__(

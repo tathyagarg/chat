@@ -20,6 +20,7 @@ class MessageKind(enum.StrEnum):
 
     MESSAGE = "MESSAGE"
     PROPAGATE = "PROPAGATE"
+    ACK = "ACK"
 
 
 class UserMessage(BaseModel):
@@ -42,6 +43,15 @@ class Payload(BaseModel):
             elif kind == MessageKind.MESSAGE:
                 return MessageRequestPayload(**data)
 
+        if type_ == MessageType.RESPONSE:
+            if kind == MessageKind.CONNECTED:
+                return ConnectedResponsePayload(**data)
+            elif kind == MessageKind.DISCONNECTED:
+                return DisconnectedResponsePayload(**data)
+            elif kind == MessageKind.ACK:
+                return ResponsePayload(**data)
+            elif kind == MessageKind.PROPAGATE:
+                return PropagateMessagePayload(**data)
         raise ValueError(f'Unknown message type/kind combination: {type_}/{kind}')
 
     @classmethod
