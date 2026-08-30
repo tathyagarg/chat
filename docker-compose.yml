@@ -11,5 +11,18 @@ services:
     volumes:
       - db_data:/var/lib/mysql
 
+  chat-server:
+    build: .
+    container_name: chat-server
+    restart: always
+    environment:
+      - MYSQL_HOST=${MYSQL_HOST}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+    ports:
+      - "12345:12345"
+    depends_on:
+      - db
+
 volumes:
   db_data:

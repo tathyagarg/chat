@@ -1,8 +1,15 @@
 import signal
 import asyncio
+import datetime
 from getpass import getpass
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+
 import shared.protocol as proto
+
+console = Console()
 
 class Server:
     def __init__(self, r: asyncio.StreamReader, w: asyncio.StreamWriter) -> None:
@@ -48,7 +55,26 @@ class Server:
                 print(f"Failed to disconnect: {response.payload.error}")
 
 
-async def authenticate_user(server) -> list[proto.UserMessage] | None:
+class ClientState:
+    def __init__(self, username: str) -> None:
+        self.username: str = username
+        self.waiting_for_ack: bool = False
+
+
+    def ack(self) -> None:
+        if not self.waiting_for_ack:
+            raise RuntimeError("Not waiting for an ack")
+
+        self.waiting_for_ack = False
+
+
+    def wait_for_ack(self) -> None:
+        if self.waiting_for_ack:
+            raise RuntimeError("Already waiting for an ack")
+
+        self.waiting_for_ack = True
+
+async def authenticate_user(server) -> tuple[list[proto.UserMessage], str] | None:
     username = input("Enter username: ")
     password = getpass("Enter password: ")
 
@@ -69,14 +95,72 @@ async def authenticate_user(server) -> list[proto.UserMessage] | None:
 
     if message.payload.success:
         print(f"Successfully authenticated as {message.payload.user}.")
-        return message.payload.messages
+        return message.payload.messages or [], username
 
     print(f"Authentication failed: {message.payload.error}")
     return
 
 
 def display_message(message: proto.UserMessage) -> None:
-    print(f"[{message.username}] {message.content}")
+    msg_time = datetime.datetime.fromisoformat(message.timestamp)
+    formatted_time = msg_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    table = Table.grid(expand=True)
+    table.add_row(message.content)
+
+    date_table = Table.grid(expand=True)
+    date_table.add_column(justify="right")
+    date_table.add_row(f"[dim]{formatted_time}[/dim]")
+
+    table.add_row(date_table)
+
+    console.print(
+        Panel(
+            table,
+            title=f"[bold italic cyan][ {message.username} ][/bold italic cyan]",
+            title_align='left',
+            expand=True,
+        )
+    )
+
+
+async def input_loop(server: Server, client: ClientState) -> None:
+    while True:
+        user_input = await asyncio.to_thread(input, "")
+        print("\033[1A\033[2K", end="")
+
+        if len(user_input.strip()) == 0:
+            continue
+
+        message = proto.Message(
+            type_=proto.MessageType.REQUEST,
+            kind=proto.MessageKind.MESSAGE,
+            payload=proto.MessageRequestPayload(
+                message=user_input
+            )
+        )
+        await server.send(message)
+
+        display_message(proto.UserMessage(
+            username=client.username,
+            content=user_input,
+            timestamp=datetime.datetime.now().isoformat()
+        ))
+
+        client.wait_for_ack()
+
+
+async def receive_loop(server: Server, client: ClientState) -> None:
+    while True:
+        message = await server.receive()
+
+        if isinstance(message.payload, proto.PropagateMessagePayload):
+            display_message(message.payload.message)
+        elif isinstance(message.payload, proto.ResponsePayload):
+            if not message.payload.success:
+                print(f"Error from server: {message.payload.error}")
+
+            client.ack()
 
 
 async def main():
@@ -96,20 +180,30 @@ async def main():
     loop.add_signal_handler(signal.SIGINT, stop_event.set)
 
     try:
-        messages = await authenticate_user(server)
-
-        if not messages:
+        resp = await authenticate_user(server)
+        if not resp:
             print("Authentication failed. Exiting...")
             return
+
+        messages, username = resp
+        client = ClientState(username)
 
         for message in sorted(messages, key=lambda m: m.timestamp):
             display_message(message)
 
-        await stop_event.wait()
+        input_task = asyncio.create_task(input_loop(server, client))
+        receive_task = asyncio.create_task(receive_loop(server, client))
+
+        try:
+            await stop_event.wait()
+        finally:
+            input_task.cancel()
+            receive_task.cancel()
+
     finally:
         print("\nDisconnecting from server...")
 
-        await server.disconnect()
+        await server.disconnect(send_only=True)
 
         server.writer.close()
         await server.writer.wait_closed()

@@ -26,7 +26,7 @@ async def handle_request_connect(
     message: proto.Message,
     sender: ClientData,
     pool: mysql.connector.pooling.MySQLConnectionPool
-):
+) -> bool:
     if not isinstance(message.payload, proto.ConnectRequestPayload):
         raise ValueError('Invalid payload type for CONNECT message')
 
@@ -45,13 +45,12 @@ async def handle_request_connect(
                         error='Invalid username or password'
                     )
                 ))
-                return
+                return False
 
             sender.set_name(message.payload.username)
             LOGGER.info(f'Client {sender.addr} set their username to {sender.username}')
 
             recent = fetch_recent_messages(conn, limit=10)
-            print(recent)
 
         await sender.respond(proto.Message(
             type_=proto.MessageType.RESPONSE,
@@ -62,6 +61,8 @@ async def handle_request_connect(
                 messages=recent
             )
         ))
+
+        return True
     except ValueError as e:
         LOGGER.warning(f'Client {sender.addr} attempted to set their username to {message.payload.username}, but it was invalid: {e}')
 
@@ -73,6 +74,8 @@ async def handle_request_connect(
                 error=str(e)
             )
         ))
+
+        return False
 
 
 async def handle_request_disconnect(
@@ -109,27 +112,31 @@ async def handle_request_message(
             message.payload.message
         )
 
-    for client in clients:
-        if client is sender:
-            await client.respond(proto.Message(
-                type_=proto.MessageType.RESPONSE,
-                kind=proto.MessageKind.ACK,
-                payload=proto.ResponsePayload(
-                    success=True
-                )
-            ))
-        else:
-            await client.respond(proto.Message(
-                type_=proto.MessageType.RESPONSE,
-                kind=proto.MessageKind.PROPAGATE,
-                payload=proto.PropagateMessagePayload(
-                    message=proto.UserMessage(
-                        username=sender.username or sender.addr,
-                        content=message.payload.message,
-                        timestamp=received_at.isoformat()
+    for client in clients.copy():
+        try:
+            if client is sender:
+                await client.respond(proto.Message(
+                    type_=proto.MessageType.RESPONSE,
+                    kind=proto.MessageKind.ACK,
+                    payload=proto.ResponsePayload(
+                        success=True
                     )
-                )
-            ))
+                ))
+            else:
+                await client.respond(proto.Message(
+                    type_=proto.MessageType.RESPONSE,
+                    kind=proto.MessageKind.PROPAGATE,
+                    payload=proto.PropagateMessagePayload(
+                        message=proto.UserMessage(
+                            username=sender.username or sender.addr,
+                            content=message.payload.message,
+                            timestamp=received_at.isoformat()
+                        )
+                    )
+                ))
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            LOGGER.warning(f'Client {client.addr} disconnected unexpectedly')
+            clients.discard(client)
 
 
 class ServerState:
@@ -204,7 +211,9 @@ class ServerState:
 
         match message.kind:
             case proto.MessageKind.CONNECT:
-                await handle_request_connect(message, sender, self.db_pool)
+                success = await handle_request_connect(message, sender, self.db_pool)
+                if not success:
+                    self.clients.discard(sender)
             case proto.MessageKind.DISCONNECT:
                 await handle_request_disconnect(sender)
                 return False

@@ -150,3 +150,7 @@ class Message:
 
         return f'{length_str}\n{body}'
 
+
+    def __str__(self) -> str:
+        return f'Message(type={self.type}, kind={self.kind}, payload={self.payload})'
+
