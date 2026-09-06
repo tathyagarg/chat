@@ -13,7 +13,7 @@
 
 ## Request Flow
 
-```
+```mermaid
 sequenceDiagram
     participant C as Client
     participant S as Server (asyncio)
