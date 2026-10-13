@@ -164,8 +164,8 @@ async def receive_loop(server: Server, client: ClientState) -> None:
 
 
 async def main():
-    server_host = input("Enter server host (default: localhost): ") or "localhost"
-    server_port = (input("Enter server port (default: 12345): ") or "12345").strip()
+    server = input("Enter server address (default: localhost:12345): ") or "localhost:12345"
+    server_host, server_port = server.split(":") if ":" in server else (server, "12345")
 
     if not server_port.isdigit():
         print("Invalid port number. Exiting...")

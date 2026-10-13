@@ -52,6 +52,10 @@ class Payload(BaseModel):
                 return ResponsePayload(**data)
             elif kind == MessageKind.PROPAGATE:
                 return PropagateMessagePayload(**data)
+
+        if type_ == MessageType.ERROR:
+            return ResponsePayload(**data)
+
         raise ValueError(f'Unknown message type/kind combination: {type_}/{kind}')
 
     @classmethod
