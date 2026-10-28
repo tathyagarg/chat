@@ -179,12 +179,14 @@ async def authenticate_user(server) -> tuple[list[proto.UserMessage], str] | Non
 
 def display_message(message: proto.UserMessage) -> None:
     """
-    Display a message in the console. The message is displayed in a panel with the username as the title, the message content as the body, and the timestamp as a dimmed footer.
-    1. Formatting the timestamp: The timestamp of the message is converted from an ISO format string to a datetime object, and then formatted as a string in the format
-       "DD MMM, YYYY HH:MM:SS".
+    Display a message in the console. The message is displayed in a panel with the username as the title, the message content as the body, and the timestamp as 
+    a dimmed footer.
+    1. Formatting the timestamp: The timestamp of the message is converted from an ISO format string to a datetime object, and then formatted as a string in 
+       the format "DD MMM, YYYY HH:MM:SS".
 
-    2. Creating the message panel: A `rich` table is created. The first row contains the message content. The second row contains another table, which has a single column with
-       the formatted timestamp. The message panel is created with the message table as the body, the username as the title, and the title aligned to the left.
+    2. Creating the message panel: A `rich` table is created. The first row contains the message content. The second row contains another table, which has a single
+       column with the formatted timestamp. The message panel is created with the message table as the body, the username as the title, and the title aligned to 
+       the left.
 
     3. Printing the message panel: The message panel is printed to the console using the `print` method of the `Console` class.
     """
@@ -216,10 +218,11 @@ async def input_loop(server: Server, client: ClientState) -> None:
     1. Reading user input: The `input` function is used to read a line of input from the console. The `asyncio.to_thread` function is used to run the blocking `input`
        function in a separate thread, allowing the event loop to continue running while waiting for user input.
 
-    2. Sending the message to the server: If the user input is not empty, a message is created with the user input as the content, and sent to the server using the `send` method.
+    2. Sending the message to the server: If the user input is not empty, a message is created with the user input as the content, and sent to the server 
+       using the `send` method.
 
-    3. Displaying the message in the console: The message is displayed in the console using the `display_message` function. The message is displayed with the username of 
-       the client and the current timestamp.
+    3. Displaying the message in the console: The message is displayed in the console using the `display_message` function. The message is displayed with the 
+       username of the client and the current timestamp.
 
     4. Waiting for acknowledgment: After sending the message to the server, the client waits for an acknowledgment from the server using the `wait_for_ack` method.
        This ensures that the message was received and processed by the server before allowing the user to send another message.
@@ -252,11 +255,12 @@ async def input_loop(server: Server, client: ClientState) -> None:
 async def receive_loop(server: Server, client: ClientState) -> None:
     """
     Continuously receive messages from the server and display them in the console. The loop runs indefinitely until the program is terminated.
-    1. Receiving messages from the server: The `receive` method of the `Server` class is used to receive messages from the server. The method blocks 
+    1. Receiving messages from the server: The `receive` method of the `Server` class is used to receive messages from the server. The method blocks
        until a message is received, allowing the event loop to continue running while waiting for messages.
 
-    2. Displaying messages in the console: If the received message is a propagate message, it is displayed in the console using the `display_message` 
-       function. If the received message is a response message, the success or error status is printed to the console, and the client acknowledges the response using the `ack` method.
+    2. Displaying messages in the console: If the received message is a propagate message, it is displayed in the console using the `display_message`
+       function. If the received message is a response message, the success or error status is printed to the console, and the client acknowledges the
+       response using the `ack` method.
     """
     while True:
         message = await server.receive()
